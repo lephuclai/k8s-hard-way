@@ -1,0 +1,7 @@
+---
+- name: Install client tools
+  hosts: deployer
+  become: true
+  gather_facts: false
+  roles:
+    - client-tools

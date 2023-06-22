@@ -1,0 +1,94 @@
+---
+- name: Create CA certificate directory
+  file:
+    path: /home/kubernetes-certificates
+
+- name: Copy templates
+  ansible.builtin.template:
+    src: {{ item.src }}
+    dest: {{ item.dest }}
+  loop:
+    - {src: 'admin-csr.json.j2', dest: /home/kubernetes-certificates/admin-csr.json}
+    - {src: 'ca-config.json.j2', dest: /home/kubernetes-certificates/ca-config.json}
+    - {src: 'ca-csr.json.j2', dest: /home/kubernetes-certificates/ca-csr.json}
+    - {src: 'kube-controller-manager-csr.json.j2', dest: /home/kubernetes-certificates/kube-controller-manager-csr.json}
+    - {src: 'kube-proxy-csr.json.j2', dest: /home/kubernetes-certificates/kube-proxy-csr.json}
+    - {src: 'kube-scheduler-csr.json.j2', dest: /home/kubernetes-certificates/kube-scheduler-csr.json}
+    - {src: 'kubernetes-csr.json.j2', dest: /home/kubernetes-certificates/kubernetes-csr.json}
+    - {src: 'service-account-csr.json.j2', dest: /home/kubernetes-certificates/service-account-csr.json}
+    # - {src: 'worker-csr.json.j2', dest: /home/kubernetes-certificates/worker-csr.json}
+
+- name: Copy worker templates
+  ansible.builtin.template:
+    src: worker-csr.json.j2
+    dest: /home/kubernetes-certificates/{{ item }}-csr.json
+  vars:
+    name: {{ item }}
+  loop:
+    - worker-1
+    - worker-2
+
+- name: Generate the CA configuration file, certificate, and private key
+  ansible.builtin.command: 
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+- name: Generate the admin client certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
+
+# - name: Generate a certificate and private key for each Kubernetes worker node
+#   ansible.builtin.command: |
+#     cat > {{ item }}-csr.json <<EOF
+#     {
+#       "CN": "system:node:{{ item }}",
+#       "key": {
+#         "algo": "rsa",
+#         "size": 2048
+#       },
+#       "names": [
+#         {
+#           "C": "VN",
+#           "L": "Hanoi",
+#           "O": "Kubernetes"
+#         }
+#       ]
+#     }
+#     EOF
+#   loop:
+#     - worker-1
+#     - worker-2
+
+- name: Generate a certificate and private key for each Kubernetes worker node
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname= {{ item.name }}, {{ item.ip }} -profile=kubernetes {{ item.name }}-csr.json | cfssljson -bare {{ item.name }}
+  loop:
+    - {name: worker-1, ip: 192.168.40.147}
+    - {name: worker-1, ip: 192.168.40.148}
+
+- name: Generate the kube-controller-manager client certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
+
+- name: Generate the kube-proxy client certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy
+
+- name: Generate the kube-scheduler client certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler
+
+- name: Generate the Kubernetes API Server certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=192.168.40.145,192.168.40.146 -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes
+
+- name: Generate the service-account certificate and private key
+  ansible.builtin.command:
+    - cd /home/kubernetes-certificates
+    - cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes service-account-csr.json | cfssljson -bare service-account

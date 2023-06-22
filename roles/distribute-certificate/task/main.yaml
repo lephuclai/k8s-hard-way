@@ -1,0 +1,4 @@
+- name: Copy the appropriate certificates and private keys to each worker
+  
+
+- name: Copy the appropriate certificates and private keys to each controller instance
